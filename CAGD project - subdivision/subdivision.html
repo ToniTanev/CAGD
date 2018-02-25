@@ -1,0 +1,394 @@
+﻿<html>
+<head>
+	<style>
+		.buttonClass {
+			background-color: #008CBA; 
+    		border: 2px solid #008CBA;
+    		color: white;
+    		padding: 10px 25px;
+    		text-align: center;
+    		text-decoration: none;
+    		display: inline-block;
+    		font-size: 16px;
+    		border-radius: 4px;
+    		transition-duration: 0.4s;
+		}
+
+		.buttonClass:hover {
+			box-shadow: 0 12px 16px 0 rgba(0,0,0,0.24), 0 17px 50px 0 rgba(0,0,0,0.19);
+			cursor: pointer;
+			background-color: white; 
+    		color: black;
+    		border: 2px solid #008CBA;
+		}
+
+		.slider {
+    		-webkit-appearance: none;
+   		 	width: 50%;
+   		 	height: 15px;
+    		border-radius: 5px;   
+    		background: #d3d3d3;
+    		outline: none;
+    		opacity: 0.8;
+    		-webkit-transition: .2s;
+    		transition: opacity .2s;
+		}
+
+		.slider:hover {
+			opacity: 1;
+		}
+
+		.slider::-webkit-slider-thumb {
+    		-webkit-appearance: none;
+    		appearance: none;
+    		width: 25px;
+   			height: 25px;
+    		border-radius: 50%; 
+    		background: #008CBA;
+    		cursor: pointer;
+		}
+	</style>
+</head>
+
+
+<body>
+	<canvas id = "canvas" width = "1350" height = "420" style="border:1px solid #000000;"> </canvas>
+	<br>
+	<br>
+	<button id = "buttonCreateBezierCurve" class = "buttonClass" type = "button" onclick = "createBezierCurve()"> Create curve </button>
+	<button id = "buttonClearCurve" class = "buttonClass" type = "button" onclick="clearCurve()"> Clear curve </button>
+	<button id = "buttonClear" class = "buttonClass" type = "button" onclick="clearCanvas()"> Clear everything</button>
+	<br>
+	<br>
+	<div class="slidecontainer">
+  		0  <input type = "range" min="0" max="10000" value="0" class="slider" id="slider" oninput = "refreshCanvas()">  1
+	</div>
+	<br>
+	<input type = "checkbox" id = "checkbox1" onchange = "toggleSlider()"> Enable slider
+	<input type = "checkbox" id = "checkbox2" onchange = "toggleLines()"> Show lines
+	<br>
+	<br>
+	Click to create a point
+	<br>
+	Double click to remove a point
+	<br>
+	Hold mouse button to move a point
+
+
+	<script>
+		
+	
+		var canvas = document.getElementById('canvas');
+		var gl = canvas.getContext('2d');
+		var slider = document.getElementById('slider');
+		var checkboxSlider = document.getElementById('checkbox1'); 
+		var checkboxLines = document.getElementById('checkbox2'); 
+		slider.disabled = true;
+
+		canvas.addEventListener('click', mouseClickHandler);
+		canvas.addEventListener('mousedown', mouseDownHandler);
+		canvas.addEventListener('mouseup', mouseUpHandler);
+		canvas.addEventListener('mousemove', mouseMoveHandler);
+		canvas.addEventListener('dblclick', mouseDblClickHandler);
+		
+
+		const pi = Math.PI;
+
+		var originalPoints = [];
+		var subdivisionPoints1 = [];
+		var subdivisionPoints2 = [];
+
+		var isCurveCreated = false;
+		var showLines = false;
+
+		var movPointIdx = -1; 
+		var cursorOffsetX = 7.5;   
+		var cursorOffsetY = 7;
+
+		//mouse events handlers
+		function mouseClickHandler(mouseEvent)
+		{
+			if(isCurveCreated)
+				return;
+
+			var cursorPosition = new Point(mouseEvent.pageX - cursorOffsetX, mouseEvent.pageY - cursorOffsetY);
+			for(var i = 0; i < originalPoints.length; i++)
+			{
+				if(distBetweenPoints(originalPoints[i], cursorPosition) <= 5)
+					return;
+			}
+
+			var currPoint = createPoint(cursorPosition.x, cursorPosition.y);
+			originalPoints.push(new Point(currPoint.x, currPoint.y));
+
+		}
+
+		function mouseDownHandler(mouseEvent)
+		{
+			movPointIdx = -1;
+
+			var cursorPosition = new Point(mouseEvent.pageX - cursorOffsetX, mouseEvent.pageY - cursorOffsetY);
+			for(var i = 0; i < originalPoints.length; i++)
+			{
+				if(distBetweenPoints(cursorPosition, originalPoints[i]) <= 5)
+				{
+					movPointIdx = i;
+				}
+			}
+		}
+
+		function mouseUpHandler(mouseEvent)
+		{
+			movPointIdx = -1;
+		}
+
+		function mouseMoveHandler(mouseEvent)
+		{
+			if(movPointIdx == -1)
+				return;
+
+			var cursorPosition = new Point(mouseEvent.pageX - cursorOffsetX, mouseEvent.pageY - cursorOffsetY);
+			originalPoints[movPointIdx] = cursorPosition;
+			refreshCanvas();
+			
+		}
+
+		function mouseDblClickHandler(mouseEvent)
+		{
+			var cursorPosition = new Point(mouseEvent.pageX - cursorOffsetX, mouseEvent.pageY - cursorOffsetY);
+			for(var i = 0; i < originalPoints.length; i++)
+			{
+				if(distBetweenPoints(originalPoints[i], cursorPosition) <= 5)
+				{
+					originalPoints.splice(i, 1);
+				}
+			}
+
+			refreshCanvas();
+		}
+
+		//event handlers
+		function toggleSlider()
+		{
+			if(checkboxSlider.checked && !isCurveCreated)
+			{
+				checkboxSlider.checked = false;
+				return;
+			}
+			if(checkboxSlider.checked && isCurveCreated)
+			{
+				slider.disabled = false;
+				refreshCanvas();
+				return;
+			}
+			if(!checkboxSlider.checked)
+			{
+				slider.disabled = true;
+				refreshCanvas();
+			}
+		}
+
+		function toggleLines()
+		{
+			if(checkboxLines.checked)
+			{
+				showLines = true;
+				refreshCanvas();
+			}
+			else
+			{
+				showLines = false;
+				refreshCanvas();
+			}
+		} 
+		
+		function clearCanvas()
+		{
+			originalPoints = [];
+			subdivisionPoints1 = [];
+			subdivisionPoints2 = [];
+			isCurveCreated = false;
+			checkboxSlider.checked = false;
+			slider.disabled = true;
+			gl.clearRect(0, 0, canvas.width, canvas.height);
+		}
+
+		function clearCurve()   //оставя само входните точки
+		{
+			subdivisionPoints1 = [];
+			subdivisionPoints2 = [];
+			isCurveCreated = false;
+			checkboxSlider.checked = false;
+			slider.disabled = true;
+			gl.clearRect(0, 0, canvas.width, canvas.height);
+			for(var i = 0; i < originalPoints.length; i++)
+			{
+				createPoint(originalPoints[i].x, originalPoints[i].y);
+			}
+		}
+
+		function refreshCanvas()   //най-обща функция за reload-ване на canvas-а; използва се за почти за всички събития (events); това е функцията, която изчислява координатите на изходните точки с коефициенти за blossom-а
+		{
+			gl.clearRect(0, 0, canvas.width, canvas.height);
+			for(var i = 0; i < originalPoints.length; i++)
+			{
+				createPoint(originalPoints[i].x, originalPoints[i].y);
+			}
+			if(!isCurveCreated)   //ако имаме само точки създадени, излизаме и не чертаем нататък
+				return;
+
+			isCurveCreated = false;
+			createBezierCurve();
+			if(slider.disabled)   //ако slider-ът е disabled, не изчисляваме изходните точки и излизаме
+				return;
+
+			isCurveCreated = false;
+			subdivisionPoints1 = [];
+			subdivisionPoints2 = [];
+			var c = slider.value/10000;
+			
+			//първата част
+			var coefficients = [];
+			for(var i = 0; i < originalPoints.length - 1; i++)
+			{
+				coefficients.push(0);
+			}
+			var p = blossomPoint(originalPoints, coefficients, 0);
+			subdivisionPoints1.push(new Point(p.x, p.y)); 
+			createPoint(p.x, p.y, 'green', 3.5);
+			for(var i = 0; i < coefficients.length ; i++)   //няма значение в какъв ред слагаме коефициентите, тъй като blossom е симетрична функция
+			{
+				coefficients[i] = c;
+				p = blossomPoint(originalPoints, coefficients, 0);
+				subdivisionPoints1.push(new Point(p.x, p.y));
+				createPoint(p.x, p.y, 'green', 3.5);
+			}
+			createBezierCurve(subdivisionPoints1, 'green');
+			isCurveCreated = false;
+
+			//втората част
+			coefficients = [];
+			for(var i = 0; i < originalPoints.length - 1; i++)
+			{
+				coefficients.push(c);
+			}
+			var p = blossomPoint(originalPoints, coefficients, 0);
+			subdivisionPoints2.push(new Point(p.x, p.y)); 
+			createPoint(p.x, p.y, 'blue', 3.5);
+			for(var i = 0; i < coefficients.length ; i++)   //няма значение в какъв ред слагаме коефициентите, тъй като blossom е симетрична функция
+			{
+				coefficients[i] = 1;
+				p = blossomPoint(originalPoints, coefficients, 0);
+				subdivisionPoints2.push(new Point(p.x, p.y));
+				createPoint(p.x, p.y, 'blue', 3.5);
+			};	
+			createBezierCurve(subdivisionPoints2, 'blue');	
+
+			//междинната точка
+			var p = getBezierPoint(originalPoints, c)
+			createPoint(p.x, p.y, 'yellow');
+		}
+
+		//helping stuff
+		function Point(x, y)   //обект точка
+		{
+			this.x = x;
+			this.y = y;
+			return this;
+		}
+
+		function Line(a, b, c)   //обект права; не се използва никъде
+		{
+			this.a = a;
+			this.b = b;
+			this.c = c;
+			return this;
+		}
+
+		function distBetweenPoints(point1, point2)
+		{
+			return Math.sqrt(Math.pow((point1.x - point2.x), 2) + Math.pow((point1.y - point2.y), 2));
+		}
+
+		function createPoint(x, y, color = 'red', radius = 5)
+		{
+			gl.strokeStyle = 'black';
+			gl.fillStyle = color;
+			gl.beginPath();
+			gl.arc(x, y, radius, 0, 2*pi);
+			gl.fill();
+			return Point(x, y);
+		}
+
+		function createLinesBetweenPoints(points, color = 'red')
+		{
+			gl.strokeStyle = color;
+			gl.beginPath();
+			gl.moveTo(points[0].x, points[0].y);
+			for(var i = 1; i < points.length; i++)
+			{
+				gl.lineTo(points[i].x, points[i].y);
+			}
+			gl.stroke();
+		}
+
+		//algorithm functions
+		function getBezierPoint(currPoints, t)   //тази функция е частен случай на blossomPoint с един фиксиран коефициент
+		{
+			if(currPoints.length == 1)
+			{
+				return Point(currPoints[0].x, currPoints[0].y);
+				
+			}
+			var nextPoints = [];
+			for(var i = 0; i < currPoints.length - 1; ++i)
+			{
+				nextPoints.push(new Point((1 - t)*currPoints[i].x + t*currPoints[i + 1].x, (1 - t)*currPoints[i].y + t*currPoints[i + 1].y));
+			}
+
+			return getBezierPoint(nextPoints, t);
+		}
+		
+		function createBezierCurve(points = originalPoints, color = 'red')
+		{
+			if(isCurveCreated || points.length == 0)
+			{
+				return;
+			}
+			gl.strokeStyle = color;
+			gl.beginPath();
+			gl.moveTo(points[0].x, points[0].y);
+			for(var t = 0; t <= 1; t += 0.0001)
+			{
+				var p = getBezierPoint(points, t);
+				gl.lineTo(p.x, p.y);
+			}
+			gl.stroke();
+			if(showLines)
+				createLinesBetweenPoints(points, color);
+			isCurveCreated = true;
+
+		}
+
+		function blossomPoint(currPoints, coefficients, currCoef)   //намира точка от blossom-а по подадени коефициенти в масива coefficients; currCoef индикира текущия коефициент
+		{
+			if(currPoints.length == 1)
+			{
+				return Point(currPoints[0].x, currPoints[0].y);
+				
+			}
+			var nextPoints = [];
+			var t = coefficients[currCoef];
+			for(var i = 0; i < currPoints.length - 1; ++i)
+			{
+				nextPoints.push(new Point((1 - t)*currPoints[i].x + t*currPoints[i + 1].x, (1 - t)*currPoints[i].y + t*currPoints[i + 1].y));
+			}
+			return blossomPoint(nextPoints, coefficients, currCoef + 1);
+		}
+		
+		
+
+	</script>
+</body>
+
+</html>
